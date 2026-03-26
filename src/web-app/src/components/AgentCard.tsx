@@ -1,32 +1,20 @@
-import type { Agent } from "~/lib/api-types";
-import { animate } from "motion";
-import { createEffect, createSignal, onMount } from "solid-js";
+/**
+ * AgentCard — displays an individual AI persona with Motion One animations.
+ */
+import { animate } from "@motionone/dom";
+import { Component, createEffect, onMount } from "solid-js";
+import type { Agent } from "@shared/schemas";
+import AgentStatusBadge from "@components/AgentStatusBadge";
 
 interface AgentCardProps {
   agent: Agent;
   onActivate?: (id: string) => void;
+  onRemove?: (id: string) => void;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  idle: "#94a3b8",
-  thinking: "#f59e0b",
-  executing: "#06b6d4",
-  done: "#10b981",
-  error: "#ef4444",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  idle: "Idle",
-  thinking: "Thinking…",
-  executing: "Executing",
-  done: "Done",
-  error: "Error",
-};
-
-export function AgentCard(props: AgentCardProps) {
+const AgentCard: Component<AgentCardProps> = (props) => {
   let cardRef: HTMLDivElement | undefined;
   let dotRef: HTMLSpanElement | undefined;
-  const [hovered, setHovered] = createSignal(false);
 
   onMount(() => {
     if (cardRef) {
@@ -36,7 +24,8 @@ export function AgentCard(props: AgentCardProps) {
 
   createEffect(() => {
     if (!dotRef) return;
-    if (props.agent.status === "thinking" || props.agent.status === "executing") {
+    const active = props.agent.status === "thinking" || props.agent.status === "executing";
+    if (active) {
       animate(dotRef, { scale: [1, 1.4, 1] }, { duration: 0.8, repeat: Infinity, easing: "ease-in-out" });
     } else {
       animate(dotRef, { scale: 1 }, { duration: 0.2 });
@@ -46,60 +35,53 @@ export function AgentCard(props: AgentCardProps) {
   return (
     <div
       ref={cardRef}
-      class="card"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        cursor: "pointer",
-        transition: "border-color 0.2s, transform 0.15s",
-        transform: hovered() ? "translateY(-2px)" : "translateY(0)",
-        "border-color": hovered() ? "var(--primary)" : "var(--border)",
-      }}
+      class="glass-card p-5 hover:scale-[1.02] hover:border-neon-violet/40 transition-all duration-200 cursor-pointer group"
       onClick={() => props.onActivate?.(props.agent.id)}
     >
-      <div style={{ display: "flex", "align-items": "flex-start", "justify-content": "space-between", "margin-bottom": "0.75rem" }}>
-        <div style={{ display: "flex", "align-items": "center", gap: "0.75rem" }}>
-          <div style={{
-            width: "2.5rem", height: "2.5rem", "border-radius": "50%",
-            background: "var(--bg-card)", display: "flex", "align-items": "center",
-            "justify-content": "center", "font-size": "1.25rem",
-          }}>
+      {/* Header row */}
+      <div class="flex items-start justify-between mb-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-neon-violet/20 to-neon-cyan/10 flex items-center justify-center text-xl shrink-0">
             {props.agent.avatar ?? "🤖"}
           </div>
           <div>
-            <p style={{ margin: 0, "font-weight": "600", "font-size": "0.9375rem" }}>{props.agent.name}</p>
-            <p style={{ margin: 0, "font-size": "0.75rem", color: "var(--text-muted)" }}>{props.agent.role}</p>
+            <p class="font-semibold text-white text-sm leading-tight">{props.agent.name}</p>
+            <p class="text-xs text-gray-400 leading-tight mt-0.5">{props.agent.role}</p>
           </div>
         </div>
-
-        <div style={{ display: "flex", "align-items": "center", gap: "0.375rem" }}>
-          <span
-            ref={dotRef}
-            style={{
-              display: "inline-block",
-              width: "8px", height: "8px", "border-radius": "50%",
-              background: STATUS_COLORS[props.agent.status] ?? "#94a3b8",
-            }}
-          />
-          <span style={{ "font-size": "0.75rem", color: "var(--text-muted)" }}>
-            {STATUS_LABELS[props.agent.status] ?? props.agent.status}
-          </span>
-        </div>
+        <span ref={dotRef} class="mt-1">
+          <AgentStatusBadge status={props.agent.status} animated />
+        </span>
       </div>
 
-      <p style={{ margin: "0 0 0.75rem", "font-size": "0.8125rem", color: "var(--text-muted)", "line-height": "1.5" }}>
-        {props.agent.description ?? "No description."}
+      {/* Description */}
+      <p class="text-xs text-gray-400 leading-relaxed mb-3 line-clamp-2">
+        {props.agent.description ?? "No description provided."}
       </p>
 
-      <div style={{ display: "flex", gap: "0.5rem", "flex-wrap": "wrap" }}>
+      {/* Tags */}
+      <div class="flex flex-wrap gap-1.5 mb-3">
         {props.agent.tags.map((tag) => (
-          <span class="badge badge-purple">{tag}</span>
+          <span class="px-2 py-0.5 text-xs font-medium text-neon-violet bg-neon-violet/10 rounded-full">
+            {tag}
+          </span>
         ))}
       </div>
 
-      <div style={{ "margin-top": "1rem", "font-size": "0.75rem", color: "var(--text-muted)" }}>
-        Model: <strong style={{ color: "#c4b5fd" }}>{props.agent.model}</strong>
+      {/* Footer */}
+      <div class="flex items-center justify-between pt-2 border-t border-white/5">
+        <span class="text-xs text-gray-500">
+          Model: <span class="text-neon-cyan font-medium">{props.agent.model}</span>
+        </span>
+        <button
+          class="opacity-0 group-hover:opacity-100 transition-opacity text-xs text-neon-violet hover:text-neon-cyan font-medium"
+          onClick={(e) => { e.stopPropagation(); props.onActivate?.(props.agent.id); }}
+        >
+          Activate →
+        </button>
       </div>
     </div>
   );
-}
+};
+
+export default AgentCard;

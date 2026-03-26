@@ -1,0 +1,107 @@
+# ──────────────────────────────────────────────────────────────────────────
+# APF — Agentic Persona Factory
+# Docker Compose — Multi-Container Architecture
+#
+# Services:
+#   apf          → SolidStart + Elysia (single container, port 3000)
+#   agent-worker → Python / CrewAI (background task runner)
+#   redis        → Agent short-term memory & task queues
+#   vector-db    → Postgres + pgvector (long-term memory / brand knowledge)
+#
+# Shared Volume:
+#   secure_workspace → sandboxed FS mounted into both apf and agent-worker
+# ──────────────────────────────────────────────────────────────────────────
+
+name: apf
+
+services:
+  # ── 1. APF Single Container (web-app + api-server) ─────────────────────
+  apf:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.apf
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: "3000"
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379
+      VECTOR_DB_URL: postgresql://pguser:pgpassword@vector-db:5432/vectordb
+    env_file:
+      - .env.prod
+    volumes:
+      - secure_workspace:/secure_workspace:rw
+    depends_on:
+      redis:
+        condition: service_healthy
+      vector-db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ── 2. Agent Worker (Python / CrewAI) ──────────────────────────────────
+  agent-worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.agent-worker
+    environment:
+      REDIS_URL: redis://redis:6379
+      VECTOR_DB_URL: postgresql://pguser:pgpassword@vector-db:5432/vectordb
+      APF_API_URL: http://apf:3000/api
+    env_file:
+      - .env.prod
+    volumes:
+      - secure_workspace:/secure_workspace:rw
+    depends_on:
+      redis:
+        condition: service_healthy
+      apf:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── 3. Redis — Short-term memory & Pub/Sub ─────────────────────────────
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── 4. Vector DB — Long-term memory / Brand knowledge ──────────────────
+  vector-db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: pguser
+      POSTGRES_PASSWORD: pgpassword
+      POSTGRES_DB: vectordb
+    volumes:
+      - vector_db_data:/var/lib/postgresql/data
+      - ./init-vector-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pguser -d vectordb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  secure_workspace:
+    driver: local
+  redis_data:
+    driver: local
+  vector_db_data:
+    driver: local

@@ -1,69 +1,126 @@
 import { Title } from "@solidjs/meta";
-import { createSignal } from "solid-js";
-import { Sidebar } from "~/components/Sidebar";
+import { Component, createSignal } from "solid-js";
+import DashboardLayout from "@layouts/DashboardLayout";
+import Card from "@components/ui/Card";
+import Button from "@components/ui/Button";
+import Input from "@components/ui/Input";
 
-export default function Settings() {
-  const [apiUrl, setApiUrl] = createSignal(
-    typeof window !== "undefined"
-      ? (import.meta.env?.VITE_API_URL ?? "http://localhost:8080")
-      : "http://localhost:8080"
-  );
-  const [wsUrl, setWsUrl] = createSignal(
-    typeof window !== "undefined"
-      ? (import.meta.env?.VITE_WS_URL ?? "ws://localhost:8080/ws")
-      : "ws://localhost:8080/ws"
-  );
+const Settings: Component = () => {
+  const [apiUrl, setApiUrl] = createSignal("/api");
+  const [wsUrl, setWsUrl] = createSignal("");
+  const [anthropicKey, setAnthropicKey] = createSignal("");
+  const [deepseekKey, setDeepseekKey] = createSignal("");
+  const [saved, setSaved] = createSignal(false);
+
+  const save = () => {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
 
   return (
-    <>
-      <Title>Settings · APF</Title>
-      <div style={{ display: "flex", "min-height": "100vh" }}>
-        <Sidebar />
-        <main style={{ flex: 1, padding: "2rem", overflow: "auto" }}>
-          <div style={{ "margin-bottom": "2rem" }}>
-            <h1 style={{ margin: 0, "font-size": "1.75rem", "font-weight": "700" }}>⚙️ Settings</h1>
-            <p style={{ margin: "0.25rem 0 0", color: "var(--text-muted)" }}>
-              Configure API endpoints and preferences
-            </p>
-          </div>
+    <DashboardLayout>
+      <Title>Settings — APF</Title>
 
-          <div class="card" style={{ "max-width": "560px" }}>
-            <h2 style={{ margin: "0 0 1.5rem", "font-size": "1rem", "font-weight": "600" }}>API Configuration</h2>
-
-            <div style={{ "margin-bottom": "1rem" }}>
-              <label style={{ display: "block", "font-size": "0.875rem", "font-weight": "500", "margin-bottom": "0.5rem" }}>
-                API Server URL
-              </label>
-              <input
-                value={apiUrl()}
-                onInput={(e) => setApiUrl(e.currentTarget.value)}
-                style={{
-                  width: "100%", background: "#0f172a", border: "1px solid var(--border)",
-                  "border-radius": "0.5rem", padding: "0.625rem 0.875rem",
-                  color: "#f1f5f9", "font-size": "0.875rem", outline: "none",
-                }}
-              />
-            </div>
-
-            <div style={{ "margin-bottom": "1.5rem" }}>
-              <label style={{ display: "block", "font-size": "0.875rem", "font-weight": "500", "margin-bottom": "0.5rem" }}>
-                WebSocket URL
-              </label>
-              <input
-                value={wsUrl()}
-                onInput={(e) => setWsUrl(e.currentTarget.value)}
-                style={{
-                  width: "100%", background: "#0f172a", border: "1px solid var(--border)",
-                  "border-radius": "0.5rem", padding: "0.625rem 0.875rem",
-                  color: "#f1f5f9", "font-size": "0.875rem", outline: "none",
-                }}
-              />
-            </div>
-
-            <button class="btn-primary">Save Configuration</button>
-          </div>
-        </main>
+      <div class="mb-6">
+        <h1 class="text-2xl font-bold text-white mb-1">⚙️ Settings</h1>
+        <p class="text-sm text-gray-400">Configure API endpoints, models, and account preferences</p>
       </div>
-    </>
+
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 max-w-4xl">
+        {/* API Configuration */}
+        <Card title="API Configuration" subtitle="Single-container Elysia endpoint">
+          <div class="space-y-4 mt-2">
+            <Input
+              label="API Base URL"
+              value={apiUrl()}
+              onInput={(e) => setApiUrl(e.currentTarget.value)}
+              placeholder="/api (same-origin)"
+            />
+            <Input
+              label="WebSocket URL (optional)"
+              value={wsUrl()}
+              onInput={(e) => setWsUrl(e.currentTarget.value)}
+              placeholder="Auto-derived from origin"
+            />
+            <div class="p-3 rounded-xl bg-neon-cyan/5 border border-neon-cyan/20">
+              <p class="text-xs text-gray-400">
+                <span class="text-neon-cyan font-medium">Single Container Mode</span> — The Elysia API server and
+                SolidStart SSR run in the same Bun process. No CORS or separate ports needed.
+              </p>
+            </div>
+          </div>
+        </Card>
+
+        {/* LLM Keys */}
+        <Card title="LLM API Keys" subtitle="Used by agent-worker container">
+          <div class="space-y-4 mt-2">
+            <Input
+              label="Anthropic API Key"
+              type="password"
+              value={anthropicKey()}
+              onInput={(e) => setAnthropicKey(e.currentTarget.value)}
+              placeholder="sk-ant-…"
+            />
+            <Input
+              label="DeepSeek API Key"
+              type="password"
+              value={deepseekKey()}
+              onInput={(e) => setDeepseekKey(e.currentTarget.value)}
+              placeholder="sk-…"
+            />
+            <p class="text-xs text-gray-500">Keys are stored in environment variables, never committed to source.</p>
+          </div>
+        </Card>
+
+        {/* Model Preferences */}
+        <Card title="Default Models" subtitle="Fallback model per agent role">
+          <div class="space-y-3 mt-2">
+            {[
+              { role: "Copywriting",  model: "claude-opus-4.6"    },
+              { role: "Strategy",     model: "deepseek-v3"         },
+              { role: "SEO / Data",   model: "claude-3.5-sonnet"  },
+              { role: "Fast Tasks",   model: "claude-haiku-4.5"   },
+            ].map(({ role, model }) => (
+              <div class="flex items-center justify-between p-3 rounded-xl bg-white/[0.03]">
+                <span class="text-sm text-gray-300">{role}</span>
+                <span class="text-xs font-mono text-neon-cyan">{model}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* Danger Zone */}
+        <Card title="Danger Zone" glow="rose">
+          <div class="space-y-3 mt-2">
+            <div class="flex items-center justify-between p-3 rounded-xl bg-neon-rose/5 border border-neon-rose/20">
+              <div>
+                <p class="text-sm font-medium text-white">Clear Workspace</p>
+                <p class="text-xs text-gray-400">Delete all files in /secure_workspace</p>
+              </div>
+              <Button variant="danger" size="sm">Clear</Button>
+            </div>
+            <div class="flex items-center justify-between p-3 rounded-xl bg-neon-rose/5 border border-neon-rose/20">
+              <div>
+                <p class="text-sm font-medium text-white">Reset All Agents</p>
+                <p class="text-xs text-gray-400">Remove all custom agents from the store</p>
+              </div>
+              <Button variant="danger" size="sm">Reset</Button>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Save Bar */}
+      <div class="mt-6 flex items-center gap-3 max-w-4xl">
+        <Button onClick={save} fullWidth={false}>
+          {saved() ? "✓ Saved!" : "Save Configuration"}
+        </Button>
+        <Button variant="secondary">
+          Reset to Defaults
+        </Button>
+      </div>
+    </DashboardLayout>
   );
-}
+};
+
+export default Settings;

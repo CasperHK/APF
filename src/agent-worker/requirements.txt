@@ -1,0 +1,13 @@
+# APF Agent Worker Dependencies
+# Core async & Redis
+redis[asyncio]>=5.2.0
+
+# AI Frameworks (uncomment / pin as needed)
+# crewai>=0.130.0
+# langgraph>=0.4.0
+# langchain-anthropic>=0.3.0
+# langchain-openai>=0.3.0
+
+# Utility
+httpx>=0.28.0
+python-dotenv>=1.0.0
