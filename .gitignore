@@ -1,6 +1,9 @@
-# Python
+node_modules/
+dist/
+.env
+.env.local
 __pycache__/
-*.py[cod]
+
 *.pyc
 *.pyo
 *.pyd
@@ -37,3 +40,4 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+.pytest_cache/
