@@ -1,0 +1,68 @@
+# APF – Multi-Container Docker Compose
+# =====================================
+# Services:
+#   redis          – State Manager (Pub/Sub + short-term memory)
+#   agent-worker   – Python AI brain (CrewAI + LangGraph)
+#
+# Extend with api-server and web-app in separate compose files or by
+# adding additional services below.
+
+version: "3.9"
+
+services:
+  # --------------------------------------------------------------------------
+  # 5. State Manager – Redis
+  # --------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: apf-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --------------------------------------------------------------------------
+  # 3. Agent Worker – Python AI Brain
+  # --------------------------------------------------------------------------
+  agent-worker:
+    build:
+      context: ./src/agent-worker
+      dockerfile: Dockerfile
+    container_name: apf-agent-worker
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      APF_JOB_CHANNEL: apf:jobs
+      APF_LOG_CHANNEL: apf:agent_logs
+      WORKSPACE_DIR: /app/workspace
+      # Set your LLM API keys via a .env file (never commit secrets).
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      # 4. Secure sandbox workspace (shared with api-server if needed).
+      - workspace_data:/app/workspace
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import redis, os; r=redis.from_url(os.environ['REDIS_URL']); r.ping()"
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+
+volumes:
+  redis_data:
+    driver: local
+  workspace_data:
+    driver: local
