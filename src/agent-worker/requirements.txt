@@ -1,2 +1,16 @@
+# APF Agent-Worker – Python Dependencies
+# =========================================
+# Core runtime
+redis>=5.0,<6.0          # Redis Pub/Sub client
+python-dotenv>=1.0,<2.0  # Load .env files in development
+
+# AI frameworks
+crewai>=0.80,<1.0        # Role-based multi-agent orchestration
+langgraph>=0.2,<1.0      # State-machine / iterative agent graphs
+
+# Document parsing
+unstructured[pdf,docx]>=0.14,<1.0  # Preferred multi-format document parser
+pypdf>=4.0,<5.0                    # PDF fallback
+python-docx>=1.1,<2.0              # DOCX fallback
 redis>=5.2.1
 pydantic>=2.11.4
