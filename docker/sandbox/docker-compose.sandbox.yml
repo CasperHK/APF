@@ -1,0 +1,136 @@
+# APF Sandbox Workspace – Docker Compose
+# Provides isolated volume mounts and an ephemeral "Runner" service for safe
+# code execution by the agent-worker.
+#
+# Usage:
+#   docker compose -f docker-compose.sandbox.yml up -d
+#
+# Security model:
+#   • Each project workspace lives under /data/workspaces/{project_id}.
+#   • The workspace volume is mounted READ-ONLY inside every runner container,
+#     except for the /output sub-directory which is mounted read-write.
+#   • Runner containers have --network=none and hard resource limits.
+#   • Files inside the workspace are owned by uid/gid 10000 (sandbox user),
+#     which is mapped from the host via userns-remap or explicit chown in the
+#     init-workspace entrypoint.
+
+version: "3.9"
+
+# ---------------------------------------------------------------------------
+# Named volumes
+# ---------------------------------------------------------------------------
+volumes:
+  workspaces:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /data/workspaces   # Host path – create this before first run
+
+  runner_output:
+    driver: local                # Ephemeral scratch space shared between
+                                 # agent-worker and the runner container.
+
+# ---------------------------------------------------------------------------
+# Networks
+# ---------------------------------------------------------------------------
+networks:
+  apf_internal:
+    driver: bridge
+  # runner_net is intentionally absent – runners use --network none
+
+# ---------------------------------------------------------------------------
+# Services
+# ---------------------------------------------------------------------------
+services:
+
+  # --------------------------------------------------------------------------
+  # agent-worker
+  # The Python process that runs CrewAI / LangGraph agents.
+  # It has read/write access to workspaces and can trigger sandbox runs.
+  # --------------------------------------------------------------------------
+  agent-worker:
+    build:
+      context: ../../src/agent-worker
+      dockerfile: Dockerfile
+    image: apf/agent-worker:latest
+    container_name: apf_agent_worker
+    user: "10000:10000"           # Non-root sandbox user
+    environment:
+      WORKSPACE_ROOT: /data/workspaces
+      SANDBOX_IMAGE: apf/sandbox-runner:latest
+      SANDBOX_MEMORY_LIMIT: 128m
+      SANDBOX_CPU_LIMIT: "0.5"
+      RUNNER_OUTPUT_DIR: /runner_output
+    volumes:
+      - workspaces:/data/workspaces
+      - runner_output:/runner_output
+      # Docker socket – needed only when using Docker-in-Docker execution mode.
+      # Mount with caution; restrict via socket proxy in production.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - apf_internal
+    restart: unless-stopped
+    depends_on:
+      - sandbox-runner-init
+
+  # --------------------------------------------------------------------------
+  # sandbox-runner-init
+  # One-shot service that pre-pulls / pre-builds the ephemeral runner image so
+  # the first execution is not slow.  Exits immediately after completion.
+  # --------------------------------------------------------------------------
+  sandbox-runner-init:
+    image: docker:24-cli
+    container_name: apf_sandbox_runner_init
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./runner:/runner-build:ro
+    command: >
+      sh -c "docker build -t apf/sandbox-runner:latest /runner-build"
+    networks:
+      - apf_internal
+    restart: "no"
+
+  # --------------------------------------------------------------------------
+  # sandbox-runner  (template / reference – NOT started directly)
+  # The agent-worker spawns ad-hoc instances of this image via the Docker SDK.
+  # This service definition is here for documentation and for `docker compose
+  # run` usage in local development.
+  #
+  # Security constraints applied at runtime by execution_tool.py:
+  #   --network none
+  #   --memory 128m
+  #   --cpus 0.5
+  #   --read-only (root fs)
+  #   workspace volume mounted :ro  (only /output is :rw)
+  #   --cap-drop ALL
+  #   --security-opt no-new-privileges
+  # --------------------------------------------------------------------------
+  sandbox-runner:
+    image: apf/sandbox-runner:latest
+    container_name: apf_sandbox_runner_template
+    user: "10000:10000"
+    network_mode: none            # No network access
+    mem_limit: 128m
+    cpus: 0.5
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      # Workspace is read-only – agents cannot overwrite source files.
+      - workspaces:/data/workspaces:ro
+      # Only the output directory is writable.
+      - runner_output:/output:rw
+      # Writable /tmp inside the container (tmpfs, not persisted).
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          size: 64m
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    restart: "no"
+    profiles:
+      - runner   # Only started explicitly; agent-worker spawns real instances.

@@ -12,3 +12,5 @@ langgraph>=0.2,<1.0      # State-machine / iterative agent graphs
 unstructured[pdf,docx]>=0.14,<1.0  # Preferred multi-format document parser
 pypdf>=4.0,<5.0                    # PDF fallback
 python-docx>=1.1,<2.0              # DOCX fallback
+redis>=5.2.1
+pydantic>=2.11.4
